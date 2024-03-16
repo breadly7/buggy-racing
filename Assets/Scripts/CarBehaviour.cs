@@ -1,5 +1,5 @@
-using System;
 using UnityEngine;
+
 public class CarBehaviour : MonoBehaviour
 {
     public WheelCollider wheelColliderFl;
@@ -17,6 +17,8 @@ public class CarBehaviour : MonoBehaviour
     private float _currentSpeedKmh = 0;
     public Transform centerOfMass;
     private Rigidbody _rigidbody;
+    private bool _movingForward;
+    
     void Start()
     {
         SetCenterofMass();
@@ -25,8 +27,11 @@ public class CarBehaviour : MonoBehaviour
     }
     void FixedUpdate ()
     {
+        // Determine if the car is driving forwards or backwards
+        _movingForward = Vector3.Angle(transform.forward, _rigidbody.velocity) < 50f;
         _currentSpeedKmh = rigidBody.velocity.magnitude * 3.6f;
-        SetMotorTorque(GetTorqueBySpeed() * Input.GetAxis("Vertical"));
+        
+        HandlePower();
         SetSteerAngle(maxSteerAngle * Input.GetAxis("Horizontal") * ( 1 - _currentSpeedKmh / maxSpeedKmh * 0.95f));
     }
     void SetSteerAngle(float angle)
@@ -66,19 +71,49 @@ public class CarBehaviour : MonoBehaviour
 
     float GetTorqueBySpeed()
     {
+        float maxSpeedReference = maxSpeedKmh;
+        if (!_movingForward)
+        {
+            maxSpeedReference = maxSpeedBackwardKmh;
+        }
+        
         // WIP for changing gears
         var actualTorque = 0f;
         
         for (float i = 0; i < nGears; i++)
         {
-            if (_currentSpeedKmh > (maxSpeedKmh / nGears * i))
+            if (_currentSpeedKmh > (maxSpeedReference / nGears * i))
             {
                 float gearReduction = i / nGears + 0.15f;
-                actualTorque = maxTorque *(1f - gearReduction*(_currentSpeedKmh - maxSpeedKmh / nGears * i) / (maxSpeedKmh / nGears));
+                actualTorque = maxTorque *(1f - gearReduction*(_currentSpeedKmh - maxSpeedReference / nGears * i) / (maxSpeedReference / nGears));
             }
         }
         
-        print(_currentSpeedKmh);
         return actualTorque;
+    }
+
+    void HandlePower()
+    {
+        bool doBraking = _currentSpeedKmh > 0.5f && (Input.GetAxis("Vertical") < 0 && _movingForward ||
+                                                     Input.GetAxis("Vertical") > 0 && !_movingForward);
+        if (doBraking)
+        {   wheelColliderFl.brakeTorque = 5000;
+            wheelColliderFr.brakeTorque = 5000;
+            wheelColliderBl.brakeTorque = 5000;
+            wheelColliderBr.brakeTorque = 5000;
+            wheelColliderFl.motorTorque = 0;
+            wheelColliderFr.motorTorque = 0;
+        } else
+        {   wheelColliderFl.brakeTorque = 0;
+            wheelColliderFr.brakeTorque = 0;
+            wheelColliderBl.brakeTorque = 0;
+            wheelColliderBr.brakeTorque = 0;
+
+            var torque = GetTorqueBySpeed() * Input.GetAxis("Vertical");
+            wheelColliderFl.motorTorque = torque; 
+            wheelColliderFr.motorTorque = torque;
+            wheelColliderBr.motorTorque = torque;
+            wheelColliderBl.motorTorque = torque;
+        }
     }
 }
